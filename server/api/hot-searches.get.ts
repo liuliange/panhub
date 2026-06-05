@@ -1,28 +1,22 @@
-import { defineEventHandler, getQuery } from "h3";
+import { defineEventHandler, getQuery, createError } from "h3";
 import { getOrCreateHotSearchService } from "../core/services/hotSearchService";
 
 export default defineEventHandler(async (event) => {
-  try {
-    const service = getOrCreateHotSearchService();
-    const query = getQuery(event);
-    const limit = parseInt((query.limit as string) || "30", 10);
-    const hotSearches = await service.getHotSearches(limit);
+  const service = getOrCreateHotSearchService();
+  const query = getQuery(event);
+  const limit = parseInt((query.limit as string) || "30", 10);
 
-    return {
-      code: 0,
-      message: "success",
-      data: {
-        hotSearches,
-      },
-    };
-  } catch (error) {
-    console.error("[GET /api/hot-searches] failed");
-    return {
-      code: -1,
-      message: "获取热搜失败",
-      data: {
-        hotSearches: [],
-      },
-    };
+  if (isNaN(limit) || limit < 1 || limit > 100) {
+    throw createError({ statusCode: 400, message: "limit 参数无效，范围 1-100" });
   }
+
+  const hotSearches = await service.getHotSearches(limit);
+
+  return {
+    code: 0,
+    message: "success",
+    data: {
+      hotSearches,
+    },
+  };
 });
