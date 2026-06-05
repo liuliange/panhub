@@ -92,11 +92,9 @@
 <script setup lang="ts">
 import { ALL_PLUGIN_NAMES } from "./config/plugins";
 import channelsConfig from "~/config/channels.json";
-import darkModeCss from "~/assets/css/dark-mode.css?raw";
-
-// 将暗色模式 CSS 注入到 <head>，绕过 Vite scoped CSS 处理
+// 暗色模式：阻塞脚本设置 class + CSS 文件引入
 useHead({
-  style: [{ innerHTML: darkModeCss }],
+  link: [{ rel: "stylesheet", href: "/css/dark-mode.css" }],
   script: [
     {
       innerHTML: `(function(){var s=localStorage.getItem('panhub:dark-mode');var d=s==='dark'||(s!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('dark')})();`,
