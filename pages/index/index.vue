@@ -160,7 +160,7 @@ const doubanHotRef = ref<InstanceType<typeof DoubanHotSection> | null>(null);
 
 // 页面加载时初始化热搜数据
 onMounted(async () => {
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await nextTick();
   // 从 URL 读取搜索关键词
   const q = route.query.q;
   if (q && typeof q === "string") {

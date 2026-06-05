@@ -25,9 +25,7 @@
           "
           @focus="isFocused = true; showHistory = true"
           @blur="isFocused = false; setTimeout(() => showHistory = false, 200)"
-          @keyup.enter="handleSearch"
-          @touchstart="handleTouchStart"
-          @touchend="handleTouchEnd" />
+          @keyup.enter="handleSearch" />
 
         <div class="search-actions">
           <!-- 重置按钮 - 搜索后显示 -->
@@ -39,8 +37,7 @@
               $emit('update:modelValue', '');
               $emit('reset');
             "
-            @touchstart="handleTouchStart"
-            @touchend="handleTouchEnd"
+
             aria-label="重置搜索"
             title="重置搜索">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -59,8 +56,7 @@
               $emit('update:modelValue', '');
               $emit('reset');
             "
-            @touchstart="handleTouchStart"
-            @touchend="handleTouchEnd"
+
             aria-label="清空关键词"
             title="清空">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -75,8 +71,7 @@
             class="action-btn pause"
             type="button"
             @click="$emit('pause')"
-            @touchstart="handleTouchStart"
-            @touchend="handleTouchEnd"
+
             aria-label="暂停搜索"
             title="暂停搜索">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -92,8 +87,7 @@
             class="action-btn resume"
             type="button"
             @click="$emit('continue')"
-            @touchstart="handleTouchStart"
-            @touchend="handleTouchEnd"
+
             aria-label="继续搜索"
             title="继续搜索">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -112,9 +106,7 @@
             type="button"
             :disabled="!modelValue"
             aria-label="开始搜索"
-            @click="handleSearch"
-            @touchstart="handleTouchStart"
-            @touchend="handleTouchEnd">
+            @click="handleSearch">
             <span class="btn-text">搜索</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M5 12h14M12 5l7 7-7 7"></path>
@@ -163,7 +155,6 @@ const emit = defineEmits(["update:modelValue", "search", "reset", "pause", "cont
 
 const isFocused = ref(false);
 const inputEl = ref<HTMLInputElement | null>(null);
-const touchStartTime = ref(0);
 
 function onSelectHistory(term: string) {
   showHistory.value = false;
@@ -187,21 +178,16 @@ function handleSearch() {
   }, 50);
 }
 
-// 处理触摸开始事件
-function handleTouchStart() {
-  touchStartTime.value = Date.now();
-}
-
-// 处理触摸结束事件
-function handleTouchEnd() {
-  const touchDuration = Date.now() - touchStartTime.value;
-  // 如果触摸时间太短，可能是误触，不执行操作
-  if (touchDuration < 50) {
-    return;
+function onKeyDownGlobal(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+    e.preventDefault();
+    inputEl.value?.focus();
+    inputEl.value?.select();
   }
 }
 
 onMounted(() => {
+  document.addEventListener("keydown", onKeyDownGlobal);
   loadHistory();
   // 仅在桌面端自动聚焦，避免移动端抢焦点和键盘闪烁
   if (window.matchMedia("(pointer: fine)").matches) {
@@ -211,6 +197,10 @@ onMounted(() => {
       }, 100);
     });
   }
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", onKeyDownGlobal);
 });
 </script>
 
