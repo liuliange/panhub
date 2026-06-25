@@ -3,7 +3,7 @@
 // @name:zh      PanHub 链接检测助手
 // @name:en      PanHub Link Checker
 // @namespace    https://panhub.shenzjd.com
-// @version      1.0.1
+// @version      1.1.0
 // @description  自动检测 PanHub 搜索结果中的失效网盘链接，标记已过期/已删除的资源，避免浪费时间点击
 // @description:en  Detect expired cloud storage links in PanHub search results and mark them with a strikethrough
 // @author       shenzjd
@@ -43,44 +43,63 @@
   /** 同一链接缓存时间（毫秒） */
   const CACHE_TTL_MS = 30 * 60 * 1000; // 30 分钟
 
-  // ========== 失效关键词 ==========
+  // ========== 平台检测规则 ==========
+  // 每个平台只检查 <title> 标签（最可靠，不会误匹配页面正文/JS 代码）
+  // 返回：true=失效, false=有效, null=无法判断
 
-  const EXPIRED_PATTERNS = [
-    // 夸克
-    /分享链接不存在/,
-    /分享已失效/,
-    /该分享已被取消/,
-    /链接已失效/,
-    // 阿里云盘
-    /分享链接已失效/,
-    /该分享已过期/,
-    /分享已过期/,
-    // 百度网盘
-    /分享已过期/,
-    /链接失效/,
-    /页面不存在/,
-    /啊哦，你来晚了/,
-    // 115
-    /文件已删除/,
-    /分享已删除/,
-    /不存在此分享/,
-    // 天翼
-    /分享已过期或不存在/,
-    /访问的页面不存在/,
-    // 迅雷
-    /分享已失效/,
-    /链接不存在/,
-    // 通用
-    /该页面无法访问/,
-    /404.*Not Found/i,
-    /资源不存在/,
-    /已被取消/,
-    /已停止分享/,
-    /expired/i,
-    /not found/i,
-    /has been removed/i,
-    /link.*invalid/i,
+  const PLATFORM_CHECKERS = [
+    {
+      name: "夸克",
+      match: (url) => url.includes("pan.quark.cn"),
+      // 夸克失效页 title: "夸克网盘分享不存在" / "夸克网盘-分享链接已失效"
+      check: (title) => /不存在|已失效|已取消|已过期/.test(title) ? true : null,
+    },
+    {
+      name: "阿里",
+      match: (url) => url.includes("alipan.com") || url.includes("aliyundrive.com"),
+      // 阿里失效页 title: "页面不存在" / "阿里云盘分享链接已失效"
+      check: (title) => /不存在|已失效|已过期|已取消/.test(title) ? true : null,
+    },
+    {
+      name: "百度",
+      match: (url) => url.includes("pan.baidu.com"),
+      // 百度失效页 title: "百度网盘-链接错误" 或页面含 "啊哦，你来晚了"
+      check: (title, body) => {
+        if (/链接错误|不存在|已过期|已失效/.test(title)) return true;
+        if (/啊哦，你来晚了/.test(body)) return true;
+        return null;
+      },
+    },
+    {
+      name: "115",
+      match: (url) => url.includes("115.com"),
+      check: (title) => /已删除|不存在|已失效|已过期/.test(title) ? true : null,
+    },
+    {
+      name: "天翼",
+      match: (url) => url.includes("cloud.189.cn"),
+      check: (title) => /不存在|已失效|已过期/.test(title) ? true : null,
+    },
+    {
+      name: "迅雷",
+      match: (url) => url.includes("pan.xunlei.com"),
+      // 迅雷失效页 title 含 "分享" + "失效/不存在"
+      check: (title) => /分享.*(失效|不存在|已过期)|不存在.*分享/.test(title) ? true : null,
+    },
+    {
+      name: "UC",
+      match: (url) => url.includes("drive.uc.cn"),
+      check: (title) => /不存在|已失效|已过期/.test(title) ? true : null,
+    },
+    {
+      name: "123",
+      match: (url) => url.includes("123pan.com"),
+      check: (title) => /不存在|已失效|已过期/.test(title) ? true : null,
+    },
   ];
+
+  // 通用兜底（仅对 HTTP 404/410 等明确错误码生效，不扫描正文）
+  const HTTP_DEAD_CODES = [404, 410, 510];
 
   // ========== 工具函数 ==========
 
@@ -105,10 +124,35 @@
     };
   }
 
-  /** 检查响应体是否包含失效关键词 */
-  function isExpiredResponse(body) {
-    if (!body || body.length < 10) return null; // 无法判断
-    return EXPIRED_PATTERNS.some((pattern) => pattern.test(body));
+  /** 从 HTML 中提取 <title> 内容 */
+  function extractTitle(body) {
+    const m = body.match(/<title[^>]*>([^<]*)<\/title>/i);
+    return m ? m[1].trim() : "";
+  }
+
+  /**
+   * 按平台检测链接是否失效
+   * @returns {boolean|null} true=失效, false=有效, null=无法判断
+   */
+  function isExpiredResponse(url, status, body) {
+    // HTTP 明确错误码 → 失效
+    if (HTTP_DEAD_CODES.includes(status)) return true;
+    // HTTP 非 200 且非重定向 → 可能失效
+    if (status >= 400 && status < 500) return true;
+    // 没有响应体 → 无法判断
+    if (!body || body.length < 50) return null;
+
+    const title = extractTitle(body);
+
+    // 按平台匹配检测器
+    for (const checker of PLATFORM_CHECKERS) {
+      if (checker.match(url)) {
+        return checker.check(title, body);
+      }
+    }
+
+    // 未知平台：只检查 HTTP 状态码，不扫描正文（避免误判）
+    return null;
   }
 
   /** 用 GM_xmlhttpRequest 检测单个链接 */
@@ -125,7 +169,7 @@
           },
           onload: function (response) {
             const body = response.responseText || "";
-            const expired = isExpiredResponse(body);
+            const expired = isExpiredResponse(url, response.status, body);
             resolve({
               alive: expired === false,
               expired: expired === true,
@@ -133,10 +177,12 @@
             });
           },
           onerror: function () {
+            // 网络错误（DNS 失败、连接拒绝）→ 可能失效
             resolve({ alive: false, expired: true, status: 0 });
           },
           ontimeout: function () {
-            resolve({ alive: null, expired: null, status: 0 }); // 未知，不标记
+            // 超时 → 无法判断，不标记
+            resolve({ alive: null, expired: null, status: 0 });
           },
         });
       } catch {
