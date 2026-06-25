@@ -163,6 +163,7 @@ const showNavMenu = ref(false);
 
 // 导航链接
 const navLinks = [
+  { name: "首页", url: "https://shenzjd.com" },
   { name: "Alist", url: "https://alist.shenzjd.com" },
   { name: "网盘搜索", url: "https://panhub.shenzjd.com", isCurrent: true },
   { name: "视频解析", url: "https://parse.shenzjd.com" },
